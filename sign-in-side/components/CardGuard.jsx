@@ -35,77 +35,95 @@ export default function CardGuard({ setGeneratedPrompt }) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [isRecording, setIsRecording] = React.useState(false);
   const [isProcessingAudio, setIsProcessingAudio] = React.useState(false);
+  const [audioURL, setAudioURL] = React.useState(null);
   const mediaRecorderRef = React.useRef(null);
+  const recordingTimeoutRef = React.useRef(null);
+  const audioChunksRef = React.useRef([]);
 
-const handleGeneratePrompt = async () => {
-  if (!userInput.trim()) return;
+  const handleGeneratePrompt = async () => {
+    if (!userInput.trim()) return;
 
-  setIsLoading(true);
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt: userInput.trim() }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error en la API: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    const formattedSuggestions =
-      data.suggestions && data.suggestions.length > 0
-        ? data.suggestions.map((s) => `• ${s}`).join("\n")
-        : "No hay sugerencias disponibles.";
-
-    setGeneratedPrompt(formattedSuggestions);
-  } catch (error) {
-    console.error("Error al procesar el prompt:", error);
-    setGeneratedPrompt("Hubo un problema al generar la respuesta.");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-
-  const handleAudioRecording = async () => {
-    if (isRecording) {
-      mediaRecorderRef.current?.stop();
-      setIsRecording(false);
-      setIsProcessingAudio(true);
-      setTimeout(() => {
-        setGeneratedPrompt(`Prompt optimizado desde audio`);
-        setIsProcessingAudio(false);
-      }, 3000);
-      return;
-    }
-
+    setIsLoading(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: userInput.trim() }),
+      });
 
-      mediaRecorder.ondataavailable = (e) => {
-        const audioBlob = new Blob([e.data], { type: "audio/wav" });
-        console.log("Audio grabado:", audioBlob);
-      };
+      if (!response.ok) {
+        throw new Error(`Error en la API: ${response.statusText}`);
+      }
 
-      mediaRecorder.start();
-      setIsRecording(true);
+      const data = await response.json();
 
-      setTimeout(() => {
-        if (isRecording) {
-          mediaRecorderRef.current?.stop();
-          setIsRecording(false);
-        }
-      }, 10000);
+      const formattedResponse =
+        data.processed_prompt || "No hay respuesta disponible.";
+
+      setGeneratedPrompt(formattedResponse);
+      setUserInput(" ");
     } catch (error) {
-      console.error("Error al acceder al micrófono:", error);
+      console.error("Error al procesar el prompt:", error);
+      setGeneratedPrompt("Hubo un problema al generar la respuesta.");
+    } finally {
+      setIsLoading(false);
     }
   };
+
+    const stopRecording = () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        setIsProcessingAudio(true);
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+
+            setTimeout(() => {
+              setGeneratedPrompt("Prompt optimizado desde audio");
+              setIsProcessingAudio(false);
+            }, 2000);
+      }
+    };
+
+    const handleAudioRecording = async () => {
+      if (isRecording) {
+        clearTimeout(recordingTimeoutRef.current);
+        stopRecording();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          setTimeout(() => {
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: "audio/wav",
+            });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            setAudioURL(audioUrl);
+            setIsProcessingAudio(false); 
+          }, 2000);
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+        setIsProcessingAudio(false);
+
+        recordingTimeoutRef.current = setTimeout(stopRecording, 10000);
+      } catch (error) {
+        console.error("Error al acceder al micrófono:", error);
+      }
+    };
 
   return (
     <Card variant="outlined" width="100%">
@@ -166,6 +184,14 @@ const handleGeneratePrompt = async () => {
           )}
         </Button>
       </Box>
+      {audioURL && (
+        <Box sx={{ marginTop: 2 }}>
+          <audio controls>
+            <source src={audioURL} type="audio/wav" />
+            Your browser does not support the audio element.
+          </audio>
+        </Box>
+      )}
     </Card>
   );
 }

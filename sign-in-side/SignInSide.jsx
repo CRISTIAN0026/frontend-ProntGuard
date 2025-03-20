@@ -6,16 +6,26 @@ import ColorModeSelect from '../shared-theme/ColorModeSelect';
 import CardGuard from "./components/CardGuard";
 import Content from './components/Content';
 import ExampleResponse from "./components/ExampleResponse";
-import { SitemarkIcon } from './components/CustomIcons';
 import { Box, Typography } from "@mui/material";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
+import ImageLogo from "./utils/Logo.png";
+import { Link } from "react-router-dom";
 
 export default function SignInSide({ generatedPrompt, setGeneratedPrompt }, props) {
   return (
     <AppTheme {...props}>
       <Box sx={{ display: { xs: "none", md: "flex", margin: "20px" } }}>
-        <SitemarkIcon />
+        <Link
+          to="/about"
+          style={{ display: "flex", alignItems: "center" }}
+        >
+          <img
+            src={ImageLogo}
+            alt="Logo"
+            style={{ width: "50px", height: "50px", cursor: "pointer" }}
+          />
+        </Link>
       </Box>
       <CssBaseline enableColorScheme />
       <ColorModeSelect sx={{ position: "fixed", top: "1rem", right: "1rem" }} />
