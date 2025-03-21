@@ -13,6 +13,15 @@ import ImageLogo from "./utils/Logo.png";
 import { Link } from "react-router-dom";
 
 export default function SignInSide({ generatedPrompt, setGeneratedPrompt }, props) {
+    React.useEffect(() => {
+      if (generatedPrompt) {
+        const utterance = new SpeechSynthesisUtterance(generatedPrompt);
+        utterance.lang = "es-ES";
+        utterance.rate = 1;
+        window.speechSynthesis.speak(utterance);
+      }
+    }, [generatedPrompt]);
+  
   return (
     <AppTheme {...props}>
       <Box sx={{ display: { xs: "none", md: "flex", margin: "20px" } }}>
