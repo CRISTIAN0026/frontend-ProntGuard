@@ -61,7 +61,7 @@ export default function CardGuard({ setGeneratedPrompt }) {
       const data = await response.json();
 
       const formattedResponse =
-        data.processed_prompt || "No hay respuesta disponible.";
+        data.sanitized_prompt || "No hay respuesta disponible.";
 
       setGeneratedPrompt(formattedResponse);
       setUserInput(" ");
