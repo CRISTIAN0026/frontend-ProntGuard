@@ -14,6 +14,7 @@ import { styled } from "@mui/material/styles";
 import { motion } from "framer-motion";
 import { Mic } from "@mui/icons-material";
 const API_URL = import.meta.env.VITE_API_URL;
+const API_URL_AUDIO = import.meta.env.VITE_API_URL_AUDIO;
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
@@ -29,7 +30,6 @@ const Card = styled(MuiCard)(({ theme }) => ({
   },
 }));
 
-
 export default function CardGuard({ setGeneratedPrompt }) {
   const [userInput, setUserInput] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -39,6 +39,7 @@ export default function CardGuard({ setGeneratedPrompt }) {
   const mediaRecorderRef = React.useRef(null);
   const recordingTimeoutRef = React.useRef(null);
   const audioChunksRef = React.useRef([]);
+  const recognitionRef = React.useRef(null);
 
   const handleGeneratePrompt = async () => {
     if (!userInput.trim()) return;
@@ -72,58 +73,105 @@ export default function CardGuard({ setGeneratedPrompt }) {
     }
   };
 
-    const stopRecording = () => {
-      if (mediaRecorderRef.current?.state === "recording") {
-        setIsProcessingAudio(true);
-        mediaRecorderRef.current.stop();
-        setIsRecording(false);
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      setIsProcessingAudio(true);
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
 
-            setTimeout(() => {
-              setGeneratedPrompt("Prompt optimizado desde audio");
-              setIsProcessingAudio(false);
-            }, 2000);
-      }
+      setTimeout(() => {
+        setGeneratedPrompt("Prompt optimizado desde audio");
+        setIsProcessingAudio(false);
+      }, 2000);
+    }
+  };
+
+  const handleAudioRecording = async () => {
+    if (isRecording) {
+      clearTimeout(recordingTimeoutRef.current);
+      stopRecording();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        setTimeout(() => {
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: "audio/wav",
+          });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          setAudioURL(audioUrl);
+          setIsProcessingAudio(false);
+        }, 2000);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setIsProcessingAudio(false);
+
+      recordingTimeoutRef.current = setTimeout(stopRecording, 10000);
+    } catch (error) {
+      console.error("Error al acceder al micrófono:", error);
+    }
+  };
+
+  const handleVoiceRecognition = () => {
+    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+      alert("Tu navegador no soporta la API de reconocimiento de voz.");
+      return;
+    }
+
+    recognitionRef.current = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognitionRef.current.lang = "es-ES";
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.continuous = false;
+
+    recognitionRef.current.onstart = () => {
+      setIsRecording(true);
     };
 
-    const handleAudioRecording = async () => {
-      if (isRecording) {
-        clearTimeout(recordingTimeoutRef.current);
-        stopRecording();
-        return;
-      }
+    recognitionRef.current.onspeechend = () => {
+      setIsRecording(false);
+      recognitionRef.current.stop();
+    };
+
+    recognitionRef.current.onresult = async (event) => {
+      const transcript = event.results[0][0].transcript;
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+        const response = await fetch(API_URL_AUDIO, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: transcript }),
         });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        audioChunksRef.current = [];
 
-        mediaRecorder.ondataavailable = (e) => {
-          audioChunksRef.current.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          setTimeout(() => {
-            const audioBlob = new Blob(audioChunksRef.current, {
-              type: "audio/wav",
-            });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            setAudioURL(audioUrl);
-            setIsProcessingAudio(false); 
-          }, 2000);
-        };
-
-        mediaRecorder.start();
-        setIsRecording(true);
-        setIsProcessingAudio(false);
-
-        recordingTimeoutRef.current = setTimeout(stopRecording, 10000);
+        const data = await response.json();
+        const textoCorregido = data.processed_prompt || transcript;
+        setGeneratedPrompt(textoCorregido);
       } catch (error) {
-        console.error("Error al acceder al micrófono:", error);
+        console.error("Error:", error);
+        setGeneratedPrompt("Hubo un problema al procesar el audio.");
       }
     };
+
+    recognitionRef.current.onerror = (event) => {
+      console.error("Error de reconocimiento:", event.error);
+      setGeneratedPrompt("Error al reconocer voz");
+    };
+
+    recognitionRef.current.start();
+  };
 
   return (
     <Card variant="outlined" width="100%">
@@ -169,7 +217,7 @@ export default function CardGuard({ setGeneratedPrompt }) {
         </Button>
 
         <Button
-          onClick={handleAudioRecording}
+          onClick={handleVoiceRecognition}
           variant="contained"
           color={isRecording || isProcessingAudio ? "error" : "primary"}
           sx={{ marginTop: "1rem", "&.Mui-disabled": { color: "#B0BEC5" } }}
