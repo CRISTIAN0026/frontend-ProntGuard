@@ -157,7 +157,8 @@ export default function CardGuard({ setGeneratedPrompt }) {
         });
 
         const data = await response.json();
-        const textoCorregido = data.processed_prompt || transcript;
+        const textoCorregido = data.sanitized_prompt || transcript;
+        // processed_prompt;
         setGeneratedPrompt(textoCorregido);
       } catch (error) {
         console.error("Error:", error);
